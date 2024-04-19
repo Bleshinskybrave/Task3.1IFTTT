@@ -1,0 +1,71 @@
+#include <Wire.h>
+#include <BH1750.h>
+#include <WiFiNINA.h> // Library for Wi-Fi connection
+#include <ArduinoHttpClient.h> // Library for HTTP client
+
+// Constants for IFTTT Webhook
+const char* IFTTT_URL = "https://maker.ifttt.com/trigger/sunlight_event/with/key/YOUR_IFTTT_KEY";
+
+// Constants for Wi-Fi
+const char* ssid = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+
+// Define sunlight thresholds (adjust as needed)
+const float sunlightThreshold = 1000.0; // Light level in lux for "sunlight"
+const float noSunlightThreshold = 100.0; // Light level in lux for "no sunlight"
+
+// BH1750 light sensor
+BH1750 GY30;
+
+// Wi-Fi and HTTP client objects
+WiFiClient wifiClient;
+HttpClient httpClient(wifiClient, "maker.ifttt.com", 80);
+
+void setup() {
+    Serial.begin(9600); 
+    Wire.begin(); 
+    GY30.begin();
+
+    // Connect to Wi-Fi
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("\nConnected to Wi-Fi");
+}
+
+void loop() {
+    float lux = GY30.readLightLevel();
+    Serial.println("Light: " + String(lux) + " lx");
+
+    // Check sunlight levels and send IFTTT notification
+    if (lux >= sunlightThreshold) {
+        sendIFTTTNotification("sunlight_started");
+    } else if (lux <= noSunlightThreshold) {
+        sendIFTTTNotification("sunlight_stopped");
+    }
+
+    delay(1000); // Adjust delay as needed
+}
+
+void sendIFTTTNotification(String event) {
+    // Construct the URL for the IFTTT Webhook
+    String url = String(IFTTT_URL);
+    
+    // Add event parameter to the URL
+    url += "?value1=" + event;
+    
+    // Make an HTTP GET request to IFTTT Webhook
+    int httpResponseCode = httpClient.get(url);
+    
+    // Handle the response
+    if (httpResponseCode == 200) {
+        Serial.println("Notification sent to IFTTT: " + event);
+    } else {
+        Serial.println("Failed to send notification to IFTTT: " + event);
+    }
+    
+    // Close the HTTP connection
+    httpClient.stop();
+}
